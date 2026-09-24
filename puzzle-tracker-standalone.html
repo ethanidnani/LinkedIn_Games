@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Puzzle Tracker</title>
+<style>
+:root{
+  --bg:#f6f5f2; --card:#ffffff; --text:#1c1b19; --sub:#6b6862; --line:#e6e3dd;
+  --accent:#2f6f4f; --win:#2f6f4f; --lose:#b5502e;
+}
+@media (prefers-color-scheme: dark){
+  :root{ --bg:#171614; --card:#221f1c; --text:#f1efe9; --sub:#a39d92; --line:#332f29; }
+}
+*{box-sizing:border-box;}
+body{margin:0;background:var(--bg);color:var(--text);font-family:Georgia,'Times New Roman',serif;}
+.wrap{max-width:760px;margin:0 auto;padding:28px 18px 60px;}
+h1{font-size:1.6rem;margin:0 0 2px;font-weight:600;}
+.tag{color:var(--sub);font-size:.85rem;margin-bottom:22px;font-family:-apple-system,sans-serif;}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px 20px;margin-bottom:18px;}
+.card h2{font-size:1.05rem;margin:0 0 12px;font-weight:600;}
+label{display:block;font-size:.78rem;color:var(--sub);margin-bottom:4px;font-family:-apple-system,sans-serif;}
+input[type=text],input[type=number],input[type=date]{
+  width:100%;padding:9px 10px;border-radius:8px;border:1px solid var(--line);
+  background:var(--bg);color:var(--text);font-family:-apple-system,sans-serif;font-size:.95rem;
+}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+.games-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-top:8px;}
+.games-grid input{padding:8px 6px;text-align:center;}
+.playerblock{border:1px solid var(--line);border-radius:10px;padding:12px;margin-top:10px;}
+.playerblock h3{margin:0 0 4px;font-size:.9rem;font-family:-apple-system,sans-serif;}
+button{font-family:-apple-system,sans-serif;font-weight:600;font-size:.9rem;border:none;border-radius:8px;padding:10px 16px;cursor:pointer;background:var(--accent);color:#fff;margin-top:14px;}
+.settings-toggle{float:right;background:none;border:none;color:var(--sub);font-size:.8rem;cursor:pointer;padding:0;font-family:-apple-system,sans-serif;text-decoration:underline;}
+table{width:100%;border-collapse:collapse;font-family:-apple-system,sans-serif;font-size:.85rem;}
+th,td{padding:7px 6px;text-align:center;border-bottom:1px solid var(--line);}
+th{color:var(--sub);font-weight:600;font-size:.72rem;text-transform:uppercase;}
+td:first-child,th:first-child{text-align:left;}
+.scroll{overflow-x:auto;}
+.win{color:var(--win);font-weight:700;}
+.lose{color:var(--lose);}
+.tie{color:var(--sub);}
+.small{font-size:.75rem;color:var(--sub);font-family:-apple-system,sans-serif;}
+.statgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+.msg{font-family:-apple-system,sans-serif;font-size:.85rem;color:var(--sub);padding:10px;}
+.hide{display:none;}
+@media (max-width:480px){ .row,.statgrid{grid-template-columns:1fr;} th,td{padding:6px 3px;font-size:.75rem;} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Puzzle Tracker</h1>
+  <div class="tag" id="subtitle">Loading…</div>
+
+  <div class="card">
+    <button class="settings-toggle" onclick="toggleSettings()">edit names</button>
+    <h2>Players &amp; Games</h2>
+    <div id="settingsForm" class="hide">
+      <div class="row">
+        <div><label>Player 1</label><input type="text" id="p1Name" placeholder="You"></div>
+        <div><label>Player 2</label><input type="text" id="p2Name" placeholder="Brother"></div>
+      </div>
+      <label style="margin-top:10px">Game names (in daily order)</label>
+      <div class="games-grid" id="gameNameInputs"></div>
+      <button onclick="saveSettings()">Save</button>
+    </div>
+    <div id="settingsSummary" class="small"></div>
+  </div>
+
+  <div class="card">
+    <h2>Log today's scores</h2>
+    <label>Date</label>
+    <input type="date" id="entryDate">
+    <div class="playerblock"><h3 id="p1Label">Player 1</h3><div class="games-grid" id="p1Inputs"></div></div>
+    <div class="playerblock"><h3 id="p2Label">Player 2</h3><div class="games-grid" id="p2Inputs"></div></div>
+    <button onclick="saveRound()">Save scores</button>
+    <span id="saveMsg" class="small"></span>
+  </div>
+
+  <div class="card">
+    <h2>History</h2>
+    <div class="scroll"><table id="historyTable"><thead></thead><tbody></tbody></table></div>
+    <div id="historyMsg" class="msg hide">No rounds logged yet.</div>
+  </div>
+
+  <div class="card">
+    <h2>Head to head</h2>
+    <div id="recordLine" class="small" style="font-size:.95rem;margin-bottom:10px;"></div>
+    <div class="statgrid">
+      <div><div class="small" style="margin-bottom:6px;">Best game (lowest avg)</div>
+        <div class="scroll"><table id="gameStatTable"><thead></thead><tbody></tbody></table></div></div>
+      <div><div class="small" style="margin-bottom:6px;">Average total by day of week</div>
+        <div class="scroll"><table id="dowTable"><thead></thead><tbody></tbody></table></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- Firebase (free tier): https://console.firebase.google.com -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script>
+// ======= 1. PASTE YOUR FIREBASE CONFIG HERE (see setup steps) =======
+// Import the functions you need from the SDKs you need
+import { initializeApp } from "firebase/app";
+import { getAnalytics } from "firebase/analytics";
+// TODO: Add SDKs for Firebase products that you want to use
+// https://firebase.google.com/docs/web/setup#available-libraries
+
+// Your web app's Firebase configuration
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+const firebaseConfig = {
+  apiKey: "AIzaSyAzUUDXvejhaOKT-CYt9_GXyWNzeHkMFHo",
+  authDomain: "linkedin-games-tracker-a573e.firebaseapp.com",
+  projectId: "linkedin-games-tracker-a573e",
+  storageBucket: "linkedin-games-tracker-a573e.firebasestorage.app",
+  messagingSenderId: "399718156259",
+  appId: "1:399718156259:web:5d0048deebf6a0fbf242d6",
+  measurementId: "G-ST0BG54DK0"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
+// ======================================================================
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+const DEFAULT_GAMES = ["Queens","Tango","Zip","Pinpoint","Crossclimb"];
+let settings=null, rounds=[];
+const $=id=>document.getElementById(id);
+
+function toggleSettings(){ $('settingsForm').classList.toggle('hide'); }
+function buildGameNameInputs(games){ $('gameNameInputs').innerHTML = games.map((g,i)=>`<input type="text" id="gname${i}" value="${g}">`).join(''); }
+function buildScoreInputs(container, games){ container.innerHTML = games.map((g,i)=>`<div><div class="small" style="text-align:center">${g}</div><input type="number" min="0" id="${container.id}_${i}"></div>`).join(''); }
+
+function applySettings(s){
+  settings = s || { p1Name:"Player 1", p2Name:"Player 2", games: DEFAULT_GAMES.slice() };
+  if(!settings.games || settings.games.length!==5) settings.games = DEFAULT_GAMES.slice();
+  $('p1Name').value=settings.p1Name; $('p2Name').value=settings.p2Name;
+  $('p1Label').textContent=settings.p1Name; $('p2Label').textContent=settings.p2Name;
+  $('settingsSummary').textContent = `${settings.p1Name} vs ${settings.p2Name} · ${settings.games.join(', ')}`;
+  buildGameNameInputs(settings.games);
+  buildScoreInputs($('p1Inputs'), settings.games);
+  buildScoreInputs($('p2Inputs'), settings.games);
+  $('subtitle').textContent = `${settings.p1Name} vs ${settings.p2Name} — daily puzzle scores, lowest wins`;
+}
+
+async function saveSettings(){
+  const games=[0,1,2,3,4].map(i=>$('gname'+i).value.trim()||DEFAULT_GAMES[i]);
+  const s={ p1Name:$('p1Name').value.trim()||"Player 1", p2Name:$('p2Name').value.trim()||"Player 2", games };
+  await db.collection('settings').doc('config').set(s);
+  toggleSettings();
+}
+
+async function saveRound(){
+  const date=$('entryDate').value; if(!date){ $('saveMsg').textContent='Pick a date first.'; return; }
+  const p1=[0,1,2,3,4].map(i=>Number($('p1Inputs_'+i).value));
+  const p2=[0,1,2,3,4].map(i=>Number($('p2Inputs_'+i).value));
+  if(p1.some(isNaN)||p2.some(isNaN)){ $('saveMsg').textContent='Fill in all 5 scores for both players.'; return; }
+  await db.collection('rounds').doc(date).set({ date, scores:{ p1, p2 } });
+  $('saveMsg').textContent='Saved.'; setTimeout(()=>$('saveMsg').textContent='',2500);
+}
+
+function dow(dateStr){ const d=new Date(dateStr+'T00:00:00'); return ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()]; }
+
+function render(){
+  if(!settings) return;
+  const sorted=[...rounds].sort((a,b)=>a.date<b.date?1:-1);
+  const games=settings.games;
+  $('historyTable').querySelector('thead').innerHTML=`<tr><th>Date</th><th>Day</th>${games.map(g=>`<th>${g}<br><span style="font-weight:400">${settings.p1Name[0]}/${settings.p2Name[0]}</span></th>`).join('')}<th>Total</th><th>Winner</th></tr>`;
+  let wins1=0, wins2=0, ties=0;
+  $('historyTable').querySelector('tbody').innerHTML = sorted.map(r=>{
+    const t1=r.scores.p1.reduce((a,b)=>a+b,0), t2=r.scores.p2.reduce((a,b)=>a+b,0);
+    let winner;
+    if(t1<t2){winner=settings.p1Name; wins1++;} else if(t2<t1){winner=settings.p2Name; wins2++;} else {winner='Tie'; ties++;}
+    const cells=games.map((g,i)=>`<td>${r.scores.p1[i]}/${r.scores.p2[i]}</td>`).join('');
+    return `<tr><td>${r.date}</td><td>${dow(r.date)}</td>${cells}<td>${t1}/${t2}</td><td class="${winner===settings.p1Name?'win':winner===settings.p2Name?'lose':'tie'}">${winner}</td></tr>`;
+  }).join('');
+  $('historyMsg').classList.toggle('hide', sorted.length>0);
+  $('historyTable').classList.toggle('hide', sorted.length===0);
+  $('recordLine').innerHTML = sorted.length ? `<b>${settings.p1Name} ${wins1}</b> — <b>${wins2} ${settings.p2Name}</b>${ties?` (${ties} tie${ties>1?'s':''})`:''} across ${sorted.length} day${sorted.length>1?'s':''}` : 'Log a few rounds to see the record.';
+
+  const gAvg={p1:games.map(()=>[]), p2:games.map(()=>[])};
+  sorted.forEach(r=>{ r.scores.p1.forEach((v,i)=>gAvg.p1[i].push(v)); r.scores.p2.forEach((v,i)=>gAvg.p2[i].push(v)); });
+  const avg=arr=>arr.length?(arr.reduce((a,b)=>a+b,0)/arr.length):null;
+  $('gameStatTable').querySelector('thead').innerHTML=`<tr><th>Game</th><th>${settings.p1Name}</th><th>${settings.p2Name}</th><th>Edge</th></tr>`;
+  $('gameStatTable').querySelector('tbody').innerHTML = games.map((g,i)=>{
+    const a1=avg(gAvg.p1[i]), a2=avg(gAvg.p2[i]);
+    let edge='—'; if(a1!==null&&a2!==null) edge = a1<a2?settings.p1Name:(a2<a1?settings.p2Name:'Tie');
+    return `<tr><td>${g}</td><td>${a1!==null?a1.toFixed(1):'–'}</td><td>${a2!==null?a2.toFixed(1):'–'}</td><td>${edge}</td></tr>`;
+  }).join('');
+
+  const byDow={};
+  sorted.forEach(r=>{ const d=dow(r.date); const t1=r.scores.p1.reduce((a,b)=>a+b,0), t2=r.scores.p2.reduce((a,b)=>a+b,0); (byDow[d]=byDow[d]||{p1:[],p2:[]}).p1.push(t1); byDow[d].p2.push(t2); });
+  const order=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  $('dowTable').querySelector('thead').innerHTML=`<tr><th>Day</th><th>${settings.p1Name}</th><th>${settings.p2Name}</th></tr>`;
+  $('dowTable').querySelector('tbody').innerHTML = order.filter(d=>byDow[d]).map(d=>`<tr><td>${d}</td><td>${avg(byDow[d].p1).toFixed(1)}</td><td>${avg(byDow[d].p2).toFixed(1)}</td></tr>`).join('') || '<tr><td class="small" colspan="3">No data yet</td></tr>';
+}
+
+$('entryDate').valueAsDate = new Date();
+applySettings(null);
+db.collection('settings').doc('config').onSnapshot(doc=>{ applySettings(doc.exists?doc.data():null); render(); });
+db.collection('rounds').onSnapshot(snap=>{ rounds = snap.docs.map(d=>d.data()); render(); });
+</script>
+</body>
+</html>
