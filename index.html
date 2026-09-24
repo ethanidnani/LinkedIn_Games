@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Puzzle Tracker</title>
+<title>LinkedIn Games Tracker</title>
 <style>
 :root{
   --bg:#f6f5f2; --card:#ffffff; --text:#1c1b19; --sub:#6b6862; --line:#e6e3dd;
@@ -50,21 +50,6 @@ td:first-child,th:first-child{text-align:left;}
 <div class="wrap">
   <h1>Puzzle Tracker</h1>
   <div class="tag" id="subtitle">Loading…</div>
-
-  <div class="card">
-    <button class="settings-toggle" onclick="toggleSettings()">edit names</button>
-    <h2>Players &amp; Games</h2>
-    <div id="settingsForm" class="hide">
-      <div class="row">
-        <div><label>Player 1</label><input type="text" id="p1Name" placeholder="You"></div>
-        <div><label>Player 2</label><input type="text" id="p2Name" placeholder="Brother"></div>
-      </div>
-      <label style="margin-top:10px">Game names (in daily order)</label>
-      <div class="games-grid" id="gameNameInputs"></div>
-      <button onclick="saveSettings()">Save</button>
-    </div>
-    <div id="settingsSummary" class="small"></div>
-  </div>
 
   <div class="card">
     <h2>Log today's scores</h2>
@@ -125,7 +110,13 @@ const analytics = getAnalytics(app);
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
-const DEFAULT_GAMES = ["Queens","Tango","Zip","Pinpoint","Crossclimb"];
+const FIXED_SETTINGS = {
+  p1Name: "Ethan",
+  p2Name: "Ryan",
+  games: ["Wend", "Zip", "Patches", "Tango", "Queens"]
+}
+
+DEFAULT_GAMES = ["Queens","Tango","Zip","Pinpoint","Crossclimb"];
 let settings=null, rounds=[];
 const $=id=>document.getElementById(id);
 
@@ -143,13 +134,6 @@ function applySettings(s){
   buildScoreInputs($('p1Inputs'), settings.games);
   buildScoreInputs($('p2Inputs'), settings.games);
   $('subtitle').textContent = `${settings.p1Name} vs ${settings.p2Name} — daily puzzle scores, lowest wins`;
-}
-
-async function saveSettings(){
-  const games=[0,1,2,3,4].map(i=>$('gname'+i).value.trim()||DEFAULT_GAMES[i]);
-  const s={ p1Name:$('p1Name').value.trim()||"Player 1", p2Name:$('p2Name').value.trim()||"Player 2", games };
-  await db.collection('settings').doc('config').set(s);
-  toggleSettings();
 }
 
 async function saveRound(){
@@ -199,7 +183,8 @@ function render(){
 
 $('entryDate').valueAsDate = new Date();
 applySettings(null);
-db.collection('settings').doc('config').onSnapshot(doc=>{ applySettings(doc.exists?doc.data():null); render(); });
+applySettings(FIXED_SETTINGS);
+render();
 db.collection('rounds').onSnapshot(snap=>{ rounds = snap.docs.map(d=>d.data()); render(); });
 </script>
 </body>
