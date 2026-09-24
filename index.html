@@ -84,14 +84,7 @@ td:first-child,th:first-child{text-align:left;}
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script>
 // ======= 1. PASTE YOUR FIREBASE CONFIG HERE (see setup steps) =======
-// Import the functions you need from the SDKs you need
-import { initializeApp } from "firebase/app";
-import { getAnalytics } from "firebase/analytics";
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
 
-// Your web app's Firebase configuration
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
   apiKey: "AIzaSyAzUUDXvejhaOKT-CYt9_GXyWNzeHkMFHo",
   authDomain: "linkedin-games-tracker-a573e.firebaseapp.com",
@@ -101,10 +94,6 @@ const firebaseConfig = {
   appId: "1:399718156259:web:5d0048deebf6a0fbf242d6",
   measurementId: "G-ST0BG54DK0"
 };
-
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
 // ======================================================================
 
 firebase.initializeApp(firebaseConfig);
@@ -116,24 +105,17 @@ const FIXED_SETTINGS = {
   games: ["Wend", "Zip", "Patches", "Tango", "Queens"]
 }
 
-DEFAULT_GAMES = ["Queens","Tango","Zip","Pinpoint","Crossclimb"];
 let settings=null, rounds=[];
 const $=id=>document.getElementById(id);
 
-function toggleSettings(){ $('settingsForm').classList.toggle('hide'); }
-function buildGameNameInputs(games){ $('gameNameInputs').innerHTML = games.map((g,i)=>`<input type="text" id="gname${i}" value="${g}">`).join(''); }
 function buildScoreInputs(container, games){ container.innerHTML = games.map((g,i)=>`<div><div class="small" style="text-align:center">${g}</div><input type="number" min="0" id="${container.id}_${i}"></div>`).join(''); }
 
-function applySettings(s){
-  settings = s || { p1Name:"Player 1", p2Name:"Player 2", games: DEFAULT_GAMES.slice() };
-  if(!settings.games || settings.games.length!==5) settings.games = DEFAULT_GAMES.slice();
-  $('p1Name').value=settings.p1Name; $('p2Name').value=settings.p2Name;
-  $('p1Label').textContent=settings.p1Name; $('p2Label').textContent=settings.p2Name;
-  $('settingsSummary').textContent = `${settings.p1Name} vs ${settings.p2Name} · ${settings.games.join(', ')}`;
-  buildGameNameInputs(settings.games);
-  buildScoreInputs($('p1Inputs'), settings.games);
-  buildScoreInputs($('p2Inputs'), settings.games);
-  $('subtitle').textContent = `${settings.p1Name} vs ${settings.p2Name} — daily puzzle scores, lowest wins`;
+function applySettings(s){ 
+  settings = s; $('p1Label').textContent = settings.p1Name; 
+  $('p2Label').textContent = settings.p2Name; 
+  buildScoreInputs($('p1Inputs'), settings.games); 
+  buildScoreInputs($('p2Inputs'), settings.games); 
+  $('subtitle').textContent = `${settings.p1Name} vs ${settings.p2Name} — daily puzzle scores, lowest wins`; 
 }
 
 async function saveRound(){
@@ -182,7 +164,6 @@ function render(){
 }
 
 $('entryDate').valueAsDate = new Date();
-applySettings(null);
 applySettings(FIXED_SETTINGS);
 render();
 db.collection('rounds').onSnapshot(snap=>{ rounds = snap.docs.map(d=>d.data()); render(); });
