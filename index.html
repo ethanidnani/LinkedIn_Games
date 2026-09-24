@@ -48,15 +48,19 @@ td:first-child,th:first-child{text-align:left;}
 </head>
 <body>
 <div class="wrap">
-  <h1>Puzzle Tracker</h1>
+  <h1>LinkedIn Games Tracker</h1>
   <div class="tag" id="subtitle">Loading…</div>
 
   <div class="card">
     <h2>Log today's scores</h2>
     <label>Date</label>
     <input type="date" id="entryDate">
-    <div class="playerblock"><h3 id="p1Label">Player 1</h3><div class="games-grid" id="p1Inputs"></div></div>
-    <div class="playerblock"><h3 id="p2Label">Player 2</h3><div class="games-grid" id="p2Inputs"></div></div>
+    <label style="margin-top:10px">Who's entering?</label>
+    <select id="whoAmI" style="width:100%;padding:9px 10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--text);font-family:-apple-system,sans-serif;font-size:.95rem;">
+      <option value="p1" id="whoOpt1">Player 1</option>
+      <option value="p2" id="whoOpt2">Player 2</option>
+    </select>
+    <div class="playerblock"><div class="games-grid" id="myInputs"></div></div>
     <button onclick="saveRound()">Save scores</button>
     <span id="saveMsg" class="small"></span>
   </div>
@@ -111,20 +115,21 @@ const $=id=>document.getElementById(id);
 function buildScoreInputs(container, games){ container.innerHTML = games.map((g,i)=>`<div><div class="small" style="text-align:center">${g}</div><input type="number" min="0" id="${container.id}_${i}"></div>`).join(''); }
 
 function applySettings(s){ 
-  settings = s; $('p1Label').textContent = settings.p1Name; 
-  $('p2Label').textContent = settings.p2Name; 
-  buildScoreInputs($('p1Inputs'), settings.games); 
-  buildScoreInputs($('p2Inputs'), settings.games); 
-  $('subtitle').textContent = `${settings.p1Name} vs ${settings.p2Name} — daily puzzle scores, lowest wins`; 
+  settings = s;
+  $('whoOpt1').textContent = settings.p1Name;
+  $('whoOpt2').textContent = settings.p2Name;
+  buildScoreInputs($('myInputs'), settings.games);
+  $('subtitle').textContent = `${settings.p1Name} vs ${settings.p2Name} — daily puzzle scores, lowest wins`;
 }
 
 async function saveRound(){
   const date=$('entryDate').value; if(!date){ $('saveMsg').textContent='Pick a date first.'; return; }
-  const p1=[0,1,2,3,4].map(i=>Number($('p1Inputs_'+i).value));
-  const p2=[0,1,2,3,4].map(i=>Number($('p2Inputs_'+i).value));
-  if(p1.some(isNaN)||p2.some(isNaN)){ $('saveMsg').textContent='Fill in all 5 scores for both players.'; return; }
-  await db.collection('rounds').doc(date).set({ date, scores:{ p1, p2 } });
-  $('saveMsg').textContent='Saved.'; setTimeout(()=>$('saveMsg').textContent='',2500);
+  const who = $('whoAmI').value;
+  const scores=[0,1,2,3,4].map(i=>Number($('myInputs_'+i).value));
+  if(scores.some(isNaN)){ $('saveMsg').textContent='Fill in all 5 scores.'; return; }
+  await db.collection('rounds').doc(date).set({ date, scores:{ [who]: scores } }, { merge:true });
+  $('saveMsg').textContent='Saved — hidden until the other player logs too.';
+  setTimeout(()=>$('saveMsg').textContent='',3500);
 }
 
 function dow(dateStr){ const d=new Date(dateStr+'T00:00:00'); return ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()]; }
@@ -133,21 +138,32 @@ function render(){
   if(!settings) return;
   const sorted=[...rounds].sort((a,b)=>a.date<b.date?1:-1);
   const games=settings.games;
+  const complete = sorted.filter(r=>r.scores.p1 && r.scores.p2);
+
   $('historyTable').querySelector('thead').innerHTML=`<tr><th>Date</th><th>Day</th>${games.map(g=>`<th>${g}<br><span style="font-weight:400">${settings.p1Name[0]}/${settings.p2Name[0]}</span></th>`).join('')}<th>Total</th><th>Winner</th></tr>`;
   let wins1=0, wins2=0, ties=0;
-  $('historyTable').querySelector('tbody').innerHTML = sorted.map(r=>{
+  complete.forEach(r=>{
     const t1=r.scores.p1.reduce((a,b)=>a+b,0), t2=r.scores.p2.reduce((a,b)=>a+b,0);
-    let winner;
-    if(t1<t2){winner=settings.p1Name; wins1++;} else if(t2<t1){winner=settings.p2Name; wins2++;} else {winner='Tie'; ties++;}
-    const cells=games.map((g,i)=>`<td>${r.scores.p1[i]}/${r.scores.p2[i]}</td>`).join('');
-    return `<tr><td>${r.date}</td><td>${dow(r.date)}</td>${cells}<td>${t1}/${t2}</td><td class="${winner===settings.p1Name?'win':winner===settings.p2Name?'lose':'tie'}">${winner}</td></tr>`;
+    if(t1<t2) wins1++; else if(t2<t1) wins2++; else ties++;
+  });
+  $('historyTable').querySelector('tbody').innerHTML = sorted.map(r=>{
+    const has1=!!r.scores.p1, has2=!!r.scores.p2;
+    if(has1 && has2){
+      const t1=r.scores.p1.reduce((a,b)=>a+b,0), t2=r.scores.p2.reduce((a,b)=>a+b,0);
+      let winner = t1<t2?settings.p1Name:(t2<t1?settings.p2Name:'Tie');
+      const cells=games.map((g,i)=>`<td>${r.scores.p1[i]}/${r.scores.p2[i]}</td>`).join('');
+      return `<tr><td>${r.date}</td><td>${dow(r.date)}</td>${cells}<td>${t1}/${t2}</td><td class="${winner===settings.p1Name?'win':winner===settings.p2Name?'lose':'tie'}">${winner}</td></tr>`;
+    }
+    const waitingOn = has1 ? settings.p2Name : settings.p1Name;
+    const blanks = games.map(()=>`<td>–</td>`).join('');
+    return `<tr><td>${r.date}</td><td>${dow(r.date)}</td>${blanks}<td colspan="2" class="tie">Waiting on ${waitingOn}</td></tr>`;
   }).join('');
   $('historyMsg').classList.toggle('hide', sorted.length>0);
   $('historyTable').classList.toggle('hide', sorted.length===0);
-  $('recordLine').innerHTML = sorted.length ? `<b>${settings.p1Name} ${wins1}</b> — <b>${wins2} ${settings.p2Name}</b>${ties?` (${ties} tie${ties>1?'s':''})`:''} across ${sorted.length} day${sorted.length>1?'s':''}` : 'Log a few rounds to see the record.';
+  $('recordLine').innerHTML = complete.length ? `<b>${settings.p1Name} ${wins1}</b> — <b>${wins2} ${settings.p2Name}</b>${ties?` (${ties} tie${ties>1?'s':''})`:''} across ${complete.length} day${complete.length>1?'s':''}` : 'Log a few rounds to see the record.';
 
   const gAvg={p1:games.map(()=>[]), p2:games.map(()=>[])};
-  sorted.forEach(r=>{ r.scores.p1.forEach((v,i)=>gAvg.p1[i].push(v)); r.scores.p2.forEach((v,i)=>gAvg.p2[i].push(v)); });
+  complete.forEach(r=>{ r.scores.p1.forEach((v,i)=>gAvg.p1[i].push(v)); r.scores.p2.forEach((v,i)=>gAvg.p2[i].push(v)); });
   const avg=arr=>arr.length?(arr.reduce((a,b)=>a+b,0)/arr.length):null;
   $('gameStatTable').querySelector('thead').innerHTML=`<tr><th>Game</th><th>${settings.p1Name}</th><th>${settings.p2Name}</th><th>Edge</th></tr>`;
   $('gameStatTable').querySelector('tbody').innerHTML = games.map((g,i)=>{
@@ -157,7 +173,7 @@ function render(){
   }).join('');
 
   const byDow={};
-  sorted.forEach(r=>{ const d=dow(r.date); const t1=r.scores.p1.reduce((a,b)=>a+b,0), t2=r.scores.p2.reduce((a,b)=>a+b,0); (byDow[d]=byDow[d]||{p1:[],p2:[]}).p1.push(t1); byDow[d].p2.push(t2); });
+  complete.forEach(r=>{ const d=dow(r.date); const t1=r.scores.p1.reduce((a,b)=>a+b,0), t2=r.scores.p2.reduce((a,b)=>a+b,0); (byDow[d]=byDow[d]||{p1:[],p2:[]}).p1.push(t1); byDow[d].p2.push(t2); });
   const order=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   $('dowTable').querySelector('thead').innerHTML=`<tr><th>Day</th><th>${settings.p1Name}</th><th>${settings.p2Name}</th></tr>`;
   $('dowTable').querySelector('tbody').innerHTML = order.filter(d=>byDow[d]).map(d=>`<tr><td>${d}</td><td>${avg(byDow[d].p1).toFixed(1)}</td><td>${avg(byDow[d].p2).toFixed(1)}</td></tr>`).join('') || '<tr><td class="small" colspan="3">No data yet</td></tr>';
